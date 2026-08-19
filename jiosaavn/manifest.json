@@ -1,11 +1,11 @@
 {
   "manifest_version": "1.0",
-  "id": "content-resolver.bloomfactory.jisaavn",
+  "id": "content-resolver.musicdeewanefactory.jisaavn",
   "name": "jisaavn",
   "version": "2",
   "type": "content-resolver",
   "thumbnail_url": "https://www.jiosaavn.com/favicon.ico",
-  "publisher": { "name": "bloomfactory" },
+  "publisher": { "name": "musicdeewanefactory" },
   "description": "Jiosaavn based content provider.",
   "resolver": true,
   "country_allowlist": ["IN"],

@@ -10,7 +10,7 @@ on:
       release_name:
         description: Base release title (run number will be appended)
         required: false
-        default: Bloomee Plugin Factory
+        default: Music Deewane Plugin Factory
 
 permissions:
   contents: write
@@ -33,8 +33,8 @@ jobs:
         id: vars
         shell: bash
         run: |
-          TAG="${{ inputs.release_tag || 'bloomfactory-v' }}${{ github.run_number }}"
-          NAME="${{ inputs.release_name || 'Bloomee Plugin Factory' }} #${{ github.run_number }}"
+          TAG="${{ inputs.release_tag || 'musicdeewanefactory-v' }}${{ github.run_number }}"
+          NAME="${{ inputs.release_name || 'Music Deewane Plugin Factory' }} #${{ github.run_number }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "Prepared Release: $NAME ($TAG)"
@@ -94,8 +94,8 @@ jobs:
         shell: bash
         env:
           # --- YOU CAN MANUALLY EDIT THESE THREE VARIABLES (These names are default text are not official.) ---
-          FACTORY_NAME: "BloomFactory (Unofficial + Community)"
-          FACTORY_DESCRIPTION: "Plugin repository for Bloomee by community." # Leave empty for null
+          FACTORY_NAME: "Music Deewane Factory"
+          FACTORY_DESCRIPTION: "Plugin repository for Music Deewane." # Leave empty for null
           FACTORY_THUMBNAIL_URL: "" # Leave empty for null
         run: |
           stamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -130,7 +130,7 @@ jobs:
 
           gh release create "$tag" plugins/*.bex bex-factory.json \
             --title "$name" \
-            --notes "Auto-built Bloomee plugins for run ${{ github.run_number }}"
+            --notes "Auto-built Music Deewane plugins for run ${{ github.run_number }}"
 
       - name: Commit updated bex-factory.json
         if: steps.packed.outputs.bex_count != '0'
@@ -143,5 +143,5 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@users.noreply.github.com
           git add bex-factory.json
-          git commit -m "chore: update bexfactory index for run ${{ github.run_number }} [skip ci]"
+          git commit -m "chore: update musicdeewanefactory index for run ${{ github.run_number }} [skip ci]"
           git push
