@@ -1,6 +1,13 @@
 name: BEX Factory Release
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "**.rs"
+      - "**.toml"
+      - "**.json"
+      - ".github/workflows/bex-factory.yml"
   workflow_dispatch:
     inputs:
       release_tag:
