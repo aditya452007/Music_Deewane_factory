@@ -21,33 +21,34 @@ use serde_json::{json, Value};
 const YT_BASE_API: &str = "https://www.youtube.com/youtubei/v1/";
 const API_KEY: &str = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30";
 const CLIENT_NAME: &str = "WEB";
-const CLIENT_VERSION: &str = "2.20240306.01.00";
+const CLIENT_VERSION: &str = "2.20260820.01.00";
 const USER_AGENT: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36";
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 
 // ANDROID_VR client — primary for ALL content (incl. YTM-exclusive).
 // Returns direct stream URLs with c=ANDROID_VR; CDN supports HEAD and large range requests.
 // mpv/ffmpeg compatible. Numeric client ID = 28.
-// Versions aligned with yt-dlp 2026-01.
+// Versions aligned with yt-dlp 2026-08.
 const ANDROID_VR_CLIENT_NAME: &str = "ANDROID_VR";
 const ANDROID_VR_CLIENT_ID: &str = "28";
-const ANDROID_VR_CLIENT_VERSION: &str = "1.71.26";
+const ANDROID_VR_CLIENT_VERSION: &str = "1.74.05";
 const ANDROID_VR_USER_AGENT: &str =
-    "com.google.android.apps.youtube.vr.oculus/1.71.26 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
+    "com.google.android.apps.youtube.vr.oculus/1.74.05 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
 const ANDROID_VR_API_URL: &str = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
 
 // IOS client — faster fallback than TVHTML5 because it usually returns direct URLs.
 // Numeric client ID = 5.
 const IOS_CLIENT_NAME: &str = "IOS";
 const IOS_CLIENT_ID: &str = "5";
-const IOS_CLIENT_VERSION: &str = "20.10.4";
-const IOS_USER_AGENT: &str = "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3 like Mac OS X)";
+const IOS_CLIENT_VERSION: &str = "21.03.02";
+const IOS_USER_AGENT: &str =
+    "com.google.ios.youtube/21.03.02 (iPhone16,2; U; CPU iOS 18_4 like Mac OS X)";
 const IOS_API_URL: &str = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
 
 // TVHTML5 client — last-resort fallback, returns signatureCipher streams.
 const TV_CLIENT_NAME: &str = "TVHTML5";
 const TV_CLIENT_ID: &str = "7";
-const TV_CLIENT_VERSION: &str = "7.20260114.12.00";
+const TV_CLIENT_VERSION: &str = "7.20260820.01.00";
 const TV_API_URL: &str = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
 
 const CACHE_ENABLED_KEY: &str = "ytvideo:cache:enabled";
@@ -767,7 +768,8 @@ pub fn clear_cached_visitor_data() {
 pub fn get_streams(video_id: &str) -> Result<Vec<StreamSource>, anyhow::Error> {
     // Fetch visitor data from the YouTube watch page.
     // Required for ANDROID_VR client to avoid LOGIN_REQUIRED on YTM-exclusive tracks.
-    let visitor_data = fetch_visitor_data(video_id);
+    let mut visitor_data = fetch_visitor_data(video_id);
+    let mut fresh_visitor_data: Option<String> = None;
 
     // --- Strategy 1: ANDROID_VR client ---
     match get_streams_android_vr(video_id, visitor_data.as_deref()) {
@@ -778,18 +780,27 @@ pub fn get_streams(video_id: &str) -> Result<Vec<StreamSource>, anyhow::Error> {
             // ANDROID_VR failed, which strongly suggests our cached visitorData is stale/invalid.
             // Let's clear the cache, fetch fresh visitor data, and retry once.
             clear_cached_visitor_data();
-            let fresh_visitor_data = fetch_visitor_data(video_id);
+            fresh_visitor_data = fetch_visitor_data(video_id);
 
             if let Ok(streams) = get_streams_android_vr(video_id, fresh_visitor_data.as_deref()) {
                 if !streams.is_empty() {
                     return Ok(streams);
                 }
             }
+            // Promote fresh token for IOS fallback.
+            if let Some(ref fresh) = fresh_visitor_data {
+                visitor_data = Some(fresh.clone());
+            }
         }
     }
 
     // --- Strategy 2: IOS client (usually direct URLs; faster than TV cipher path) ---
-    if let Ok(streams) = get_streams_ios(video_id, visitor_data.as_deref()) {
+    // Use freshest visitorData — if we retried ANDROID_VR we already have fresh.
+    let ios_visitor_data: Option<String> = match fresh_visitor_data {
+        Some(fresh) => Some(fresh),
+        None => fetch_visitor_data(video_id).or(visitor_data),
+    };
+    if let Ok(streams) = get_streams_ios(video_id, ios_visitor_data.as_deref()) {
         if !streams.is_empty() {
             return Ok(streams);
         }

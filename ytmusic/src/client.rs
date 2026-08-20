@@ -21,34 +21,34 @@ use serde_json::{json, Value};
 const YTM_BASE_API: &str = "https://music.youtube.com/youtubei/v1/";
 const API_KEY: &str = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30";
 const CLIENT_NAME: &str = "WEB_REMIX";
-const CLIENT_VERSION: &str = "1.20260222.01.00";
+const CLIENT_VERSION: &str = "1.20260820.01.00";
 const USER_AGENT: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36";
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 
 // ANDROID_VR client — primary for ALL content (incl. YTM-exclusive).
 // Returns direct stream URLs with c=ANDROID_VR; CDN supports HEAD and large range requests.
 // mpv/ffmpeg compatible. Numeric client ID = 28.
-// Versions aligned with yt-dlp 2026-01.
+// Versions aligned with yt-dlp 2026-08.
 const ANDROID_VR_CLIENT_NAME: &str = "ANDROID_VR";
 const ANDROID_VR_CLIENT_ID: &str = "28";
-const ANDROID_VR_CLIENT_VERSION: &str = "1.71.26";
+const ANDROID_VR_CLIENT_VERSION: &str = "1.74.05";
 const ANDROID_VR_USER_AGENT: &str =
-    "com.google.android.apps.youtube.vr.oculus/1.71.26 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
+    "com.google.android.apps.youtube.vr.oculus/1.74.05 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
 const ANDROID_VR_API_URL: &str = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
 
 // IOS client — faster fallback than TVHTML5 because it usually returns direct URLs.
 // Numeric client ID = 5.
 const IOS_CLIENT_NAME: &str = "IOS";
 const IOS_CLIENT_ID: &str = "5";
-const IOS_CLIENT_VERSION: &str = "20.10.4";
+const IOS_CLIENT_VERSION: &str = "21.03.02";
 const IOS_USER_AGENT: &str =
-    "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3 like Mac OS X)";
+    "com.google.ios.youtube/21.03.02 (iPhone16,2; U; CPU iOS 18_4 like Mac OS X)";
 const IOS_API_URL: &str = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
 
 // TVHTML5 client — last-resort fallback, returns signatureCipher streams.
 const TV_CLIENT_NAME: &str = "TVHTML5";
 const TV_CLIENT_ID: &str = "7";
-const TV_CLIENT_VERSION: &str = "7.20260114.12.00";
+const TV_CLIENT_VERSION: &str = "7.20260820.01.00";
 const TV_API_URL: &str = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
 
 const CACHE_ENABLED_KEY: &str = "ytmusic:cache:enabled";

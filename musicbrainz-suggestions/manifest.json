@@ -1,12 +1,14 @@
-{
-  "manifest_version": "1.0",
-  "id": "search-suggestion-provider.musicdeewanefactory.musicbrainzsuggestions",
-  "name": "musicbrainz-suggestions",
-  "version": "1",
-  "type": "search-suggestion-provider",
-  "thumbnail_url": "https://avatars.githubusercontent.com/u/293421?s=200&v=4",
-  "publisher": {"name": "musicdeewanefactory"},
-  "description": "Search suggestions powered by MusicBrainz API.",
-  "created_at": "2026-03-13T06:48:58.4158864Z",
-  "last_updated": "2026-03-13T06:48:58.4158864Z"
+﻿{
+    "manifest_version":  "1.0",
+    "id":  "search-suggestion-provider.musicdeewanefactory.musicbrainzsuggestions",
+    "name":  "musicbrainz-suggestions",
+    "version":  "2",
+    "type":  "search-suggestion-provider",
+    "thumbnail_url":  "https://avatars.githubusercontent.com/u/293421?s=200\u0026v=4",
+    "publisher":  {
+                      "name":  "musicdeewanefactory"
+                  },
+    "description":  "Search suggestions powered by MusicBrainz API.",
+    "created_at":  "2026-03-13T06:48:58.4158864Z",
+    "last_updated":  "2026-08-20T17:23:50.5246237+05:30"
 }
