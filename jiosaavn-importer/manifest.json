@@ -1,14 +1,12 @@
-﻿{
-    "manifest_version":  "1.0",
-    "id":  "content-importer.musicdeewanefactory.jiosaavnimporter",
-    "name":  "jiosaavn-importer",
-    "version":  "2",
-    "type":  "content-importer",
-    "thumbnail_url":  "https://www.jiosaavn.com/favicon.ico",
-    "publisher":  {
-                      "name":  "musicdeewanefactory"
-                  },
-    "description":  "Import Jiosaavn playlists and albums into bloomee.",
-    "created_at":  "2026-03-13T06:51:07.1019608Z",
-    "last_updated":  "2026-08-20T17:23:50.5062894+05:30"
+{
+  "manifest_version": "1.0",
+  "id": "content-importer.musicdeewanefactory.jiosaavnimporter",
+  "name": "jiosaavn-importer",
+  "version": "2",
+  "type": "content-importer",
+  "thumbnail_url": "https://www.jiosaavn.com/favicon.ico",
+  "publisher": {"name": "musicdeewanefactory"},
+  "description": "Import Jiosaavn playlists and albums into bloomee.",
+  "created_at": "2026-03-13T06:51:07.1019608Z",
+  "last_updated": "2026-08-20T13:51:15Z"
 }
