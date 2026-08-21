@@ -191,23 +191,22 @@ jobs:
           FACTORY_DESCRIPTION: "Plugin repository for Music Deewane."
           FACTORY_THUMBNAIL_URL: ""
         run: |
-          set -e
+          set +e
           stamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           base="https://github.com/${{ github.repository }}/releases/download/${{ steps.vars.outputs.tag }}"
           echo "Finalizing bex-factory.json with stamp $stamp and base $base"
           echo "Input file: plugins/bex-factory.json"
-          cat plugins/bex-factory.json | jq . | head -80
-          echo "--- raw plugins/bex-factory.json for debug ---"
-          cat plugins/bex-factory.json | head -c 2000
+          echo "--- input head ---"
+          cat plugins/bex-factory.json | head -c 3000
           echo ""
-          # Robust finalization: handle missing .plugins, ensure valid JSON
-          # First verify input is valid
+          echo "--- jq validation ---"
           jq empty plugins/bex-factory.json
-          echo "Input JSON valid"
-          # Show structure keys
-          echo "Input top-level keys: $(jq -r 'keys | join(", ")' plugins/bex-factory.json)"
-          echo "Plugins field type: $(jq -r '.plugins | type' plugins/bex-factory.json)"
-          set +e
+          echo "jq empty exit: $?"
+          echo "keys: $(jq -r 'keys | join(", ")' plugins/bex-factory.json 2>&1)"
+          echo "plugins type: $(jq -r '.plugins | type' plugins/bex-factory.json 2>&1)"
+          echo "plugins length: $(jq '.plugins | length' plugins/bex-factory.json 2>&1)"
+          # Try jq finalization with verbose error capture
+          echo "--- attempting jq finalize ---"
           jq --arg base "$base" \
              --arg stamp "$stamp" \
              --arg name "$FACTORY_NAME" \
@@ -222,41 +221,55 @@ jobs:
                 download_url: ($base + "/" + .asset_name),
                 released_at: $stamp
               }))
-          ' plugins/bex-factory.json > bex-factory.json
+          ' plugins/bex-factory.json > bex-factory.json 2> jq.err
           JQ_EXIT=$?
-          set -e
+          echo "jq exit: $JQ_EXIT"
           if [ $JQ_EXIT -ne 0 ]; then
-            echo "ERROR: jq finalize failed with exit $JQ_EXIT"
-            echo "Attempting fallback: copy plugins/bex-factory.json and patch with python..."
-            python3 -c "
-          import json
-          import sys
+            echo "jq stderr:"
+            cat jq.err
+            echo "--- input file for fallback debug ---"
+            cat plugins/bex-factory.json | head -c 5000
+            echo ""
+            echo "Attempting python fallback..."
+            stamp="$stamp" base="$base" python3 << 'PYEOF'
+          import json, os
+          stamp = os.environ.get('stamp', '')
+          base = os.environ.get('base', '')
+          print(f"python fallback stamp={stamp} base={base}")
           with open('plugins/bex-factory.json', 'r', encoding='utf-8') as f:
               data = json.load(f)
-          import datetime
-          stamp = '$stamp'
-          base = '$base'
-          data['name'] = '$FACTORY_NAME'
-          data['description'] = None if '$FACTORY_DESCRIPTION' == '' else '$FACTORY_DESCRIPTION'
-          data['thumbnail_url'] = None if '$FACTORY_THUMBNAIL_URL' == '' else '$FACTORY_THUMBNAIL_URL'
+          print(f"Loaded data keys: {list(data.keys())}")
+          print(f"Plugins count: {len(data.get('plugins', []))}")
+          data['name'] = os.environ.get('FACTORY_NAME', 'Music Deewane Factory')
+          data['description'] = None
+          data['thumbnail_url'] = None
           data['generated_at'] = stamp
           for p in data.get('plugins', []):
               p['last_updated'] = stamp
               p['released_at'] = stamp
-              p['download_url'] = f\"{base}/{p.get('asset_name','')}\"
+              p['download_url'] = f"{base}/{p.get('asset_name','')}"
           with open('bex-factory.json', 'w', encoding='utf-8') as f:
               json.dump(data, f, indent=2, ensure_ascii=False)
           print('Fallback python patch succeeded')
-          "
+          PYEOF
+            PY_EXIT=$?
+            echo "python exit: $PY_EXIT"
+            if [ $PY_EXIT -ne 0 ]; then
+              echo "Python fallback also failed"
+              exit 1
+            fi
           fi
-          echo "Generated bex-factory.json:"
-          cat bex-factory.json | jq . | head -80
-          # Validate output
+          echo "--- generated bex-factory.json head ---"
+          cat bex-factory.json | head -c 3000
+          echo ""
+          echo "Validating output..."
           jq empty bex-factory.json
+          echo "jq empty output exit: $?"
           echo "bex-factory.json valid, plugins: $(jq '.plugins | length' bex-factory.json)"
-          # Verify download URLs
           echo "Download URLs:"
-          jq -r '.plugins[] | .download_url' bex-factory.json
+          jq -r '.plugins[] | .download_url' bex-factory.json 2>&1 | head -20
+          # Ensure success exit
+          exit 0
 
       - name: Publish GitHub release
         env:
