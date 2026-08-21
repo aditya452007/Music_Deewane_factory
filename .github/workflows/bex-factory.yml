@@ -196,7 +196,18 @@ jobs:
           base="https://github.com/${{ github.repository }}/releases/download/${{ steps.vars.outputs.tag }}"
           echo "Finalizing bex-factory.json with stamp $stamp and base $base"
           echo "Input file: plugins/bex-factory.json"
-          cat plugins/bex-factory.json | jq . | head -50
+          cat plugins/bex-factory.json | jq . | head -80
+          echo "--- raw plugins/bex-factory.json for debug ---"
+          cat plugins/bex-factory.json | head -c 2000
+          echo ""
+          # Robust finalization: handle missing .plugins, ensure valid JSON
+          # First verify input is valid
+          jq empty plugins/bex-factory.json
+          echo "Input JSON valid"
+          # Show structure keys
+          echo "Input top-level keys: $(jq -r 'keys | join(", ")' plugins/bex-factory.json)"
+          echo "Plugins field type: $(jq -r '.plugins | type' plugins/bex-factory.json)"
+          set +e
           jq --arg base "$base" \
              --arg stamp "$stamp" \
              --arg name "$FACTORY_NAME" \
@@ -206,12 +217,38 @@ jobs:
             | .description = (if $desc == "" then null else $desc end)
             | .thumbnail_url = (if $thumb == "" then null else $thumb end)
             | .generated_at = $stamp
-            | .plugins |= map(. + {
+            | .plugins = ((.plugins // []) | map(. + {
                 last_updated: $stamp,
                 download_url: ($base + "/" + .asset_name),
                 released_at: $stamp
-              })
+              }))
           ' plugins/bex-factory.json > bex-factory.json
+          JQ_EXIT=$?
+          set -e
+          if [ $JQ_EXIT -ne 0 ]; then
+            echo "ERROR: jq finalize failed with exit $JQ_EXIT"
+            echo "Attempting fallback: copy plugins/bex-factory.json and patch with python..."
+            python3 -c "
+          import json
+          import sys
+          with open('plugins/bex-factory.json', 'r', encoding='utf-8') as f:
+              data = json.load(f)
+          import datetime
+          stamp = '$stamp'
+          base = '$base'
+          data['name'] = '$FACTORY_NAME'
+          data['description'] = None if '$FACTORY_DESCRIPTION' == '' else '$FACTORY_DESCRIPTION'
+          data['thumbnail_url'] = None if '$FACTORY_THUMBNAIL_URL' == '' else '$FACTORY_THUMBNAIL_URL'
+          data['generated_at'] = stamp
+          for p in data.get('plugins', []):
+              p['last_updated'] = stamp
+              p['released_at'] = stamp
+              p['download_url'] = f\"{base}/{p.get('asset_name','')}\"
+          with open('bex-factory.json', 'w', encoding='utf-8') as f:
+              json.dump(data, f, indent=2, ensure_ascii=False)
+          print('Fallback python patch succeeded')
+          "
+          fi
           echo "Generated bex-factory.json:"
           cat bex-factory.json | jq . | head -80
           # Validate output
