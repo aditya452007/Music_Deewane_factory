@@ -13,7 +13,7 @@ on:
       release_tag:
         description: Base release tag (run number will be appended)
         required: false
-        default: factory
+        default: musicdeewanefactory-v
       release_name:
         description: Base release title (run number will be appended)
         required: false
@@ -40,11 +40,52 @@ jobs:
         id: vars
         shell: bash
         run: |
-          TAG="${{ inputs.release_tag || 'musicdeewanefactory-v' }}${{ github.run_number }}"
-          NAME="${{ inputs.release_name || 'Music Deewane Plugin Factory' }} #${{ github.run_number }}"
+          # Handle both workflow_dispatch inputs and default push
+          INPUT_TAG="${{ inputs.release_tag }}"
+          INPUT_NAME="${{ inputs.release_name }}"
+          if [ -z "$INPUT_TAG" ]; then
+            INPUT_TAG="musicdeewanefactory-v"
+          fi
+          if [ -z "$INPUT_NAME" ]; then
+            INPUT_NAME="Music Deewane Plugin Factory"
+          fi
+          TAG="${INPUT_TAG}${{ github.run_number }}"
+          NAME="${INPUT_NAME} #${{ github.run_number }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "Prepared Release: $NAME ($TAG)"
+
+      - name: Validate manifests (no BOM, valid JSON, UTF-8)
+        shell: bash
+        run: |
+          echo "Validating all manifest.json files..."
+          failed=0
+          for f in */manifest.json; do
+            echo "--- $f ---"
+            # Check BOM (UTF-8 BOM is EF BB BF)
+            if head -c 3 "$f" | od -An -tx1 | grep -q "ef bb bf"; then
+              echo "ERROR: $f has UTF-8 BOM!"
+              failed=1
+            fi
+            # Validate JSON
+            if ! jq empty "$f" 2>&1; then
+              echo "ERROR: $f is invalid JSON"
+              failed=1
+            else
+              echo "OK: $f"
+              # Check required fields
+              id=$(jq -r '.id // empty' "$f")
+              if [[ -z "$id" ]]; then
+                echo "ERROR: $f missing id"
+                failed=1
+              fi
+            fi
+          done
+          if [ $failed -ne 0 ]; then
+            echo "Manifest validation failed"
+            exit 1
+          fi
+          echo "All manifests valid"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -59,11 +100,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Attempting to fetch pre-built cargo-component..."
-          if gh release download --repo bytecodealliance/cargo-component --pattern "*x86_64-unknown-linux-gnu.tar.gz" --dir .; then
+          if gh release download --repo bytecodealliance/cargo-component --pattern "*x86_64-unknown-linux-gnu.tar.gz" --dir . 2>&1; then
             tar -xzf *x86_64-unknown-linux-gnu.tar.gz
             find . -type f -name "cargo-component" -exec chmod +x {} \; -exec mv {} ~/.cargo/bin/ \;
-            rm *x86_64-unknown-linux-gnu.tar.gz
+            rm -f *x86_64-unknown-linux-gnu.tar.gz
             echo "Successfully installed pre-built cargo-component."
+            cargo component --version || echo "cargo component version check failed, but continue"
           else
             echo "Failed to download pre-built binary. Falling back to cargo install..."
             cargo install cargo-component --locked
@@ -74,40 +116,87 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Attempting to fetch pre-built bex from HemantKArya/bloomee-ext..."
-          if gh release download --repo HemantKArya/bloomee-ext --pattern "bex-linux-x86_64.tar.gz" --dir .; then
+          if gh release download --repo HemantKArya/bloomee-ext --pattern "bex-linux-x86_64.tar.gz" --dir . 2>&1; then
             tar -xzf bex-linux-x86_64.tar.gz
             chmod +x bex
             mv bex ~/.cargo/bin/
-            rm bex-linux-x86_64.tar.gz
+            rm -f bex-linux-x86_64.tar.gz
             echo "Successfully installed pre-built bex."
+            bex --version || echo "bex version check failed"
           else
             echo "Failed to download pre-built binary. Falling back to cargo install..."
             cargo install --git "https://github.com/HemantKArya/bloomee-ext" --bin bex --locked
           fi
 
       - name: Build and pack all plugins
-        run: bex pack-all --dir . --output-dir plugins --skip-failures
+        shell: bash
+        run: |
+          set -e
+          echo "Cleaning previous plugins output..."
+          rm -rf plugins
+          mkdir -p plugins
+          echo "Packing plugins with bex..."
+          # Show bex version
+          bex --version || true
+          # List plugins to pack
+          echo "Plugins found:"
+          ls -1 -d */ | grep -v ".github" || true
+          # Pack with verbose output, keep log
+          set +e
+          bex pack-all --dir . --output-dir plugins --skip-failures 2>&1 | tee pack.log
+          BEX_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo "bex pack-all exit code: $BEX_EXIT"
+          echo "--- pack.log ---"
+          cat pack.log || true
+          echo "--- plugins dir after pack ---"
+          ls -lh plugins/ || echo "plugins dir empty or missing"
+          echo "--- bex-factory.json generated ---"
+          cat plugins/bex-factory.json 2>&1 | head -100 || echo "No plugins/bex-factory.json"
+          # Fail if bex itself failed hard (not just skip-failures)
+          if [ $BEX_EXIT -ne 0 ]; then
+            echo "bex pack-all failed with exit $BEX_EXIT (some plugins may have failed, but --skip-failures should allow partial success)"
+          fi
 
       - name: Count packed plugins
         id: packed
         shell: bash
         run: |
-          count=$(find plugins -maxdepth 1 -type f -name "*.bex" | wc -l)
+          count=$(find plugins -maxdepth 1 -type f -name "*.bex" | wc -l | tr -d ' ')
           echo "bex_count=$count" >> "$GITHUB_OUTPUT"
           echo "Found $count .bex file(s)"
+          ls -lh plugins/*.bex 2>&1 || true
+          if [ "$count" = "0" ]; then
+            echo "ERROR: No .bex files were packed. Failing workflow so it is visible."
+            echo "This usually means bex pack failed for all plugins. Check pack.log above."
+            # Show pack.log again
+            cat pack.log || true
+            exit 1
+          fi
+          # Verify bex-factory.json exists and is valid
+          if [ ! -f "plugins/bex-factory.json" ]; then
+            echo "ERROR: plugins/bex-factory.json missing"
+            exit 1
+          fi
+          echo "Verifying plugins/bex-factory.json..."
+          jq empty plugins/bex-factory.json
+          echo "plugins/bex-factory.json is valid JSON"
+          echo "Plugin count in json: $(jq '.plugins | length' plugins/bex-factory.json)"
+          jq '.plugins[] | "\(.id) -> \(.asset_name)"' plugins/bex-factory.json || true
 
       - name: Finalize bex-factory.json
-        if: steps.packed.outputs.bex_count != '0'
         shell: bash
         env:
-          # --- YOU CAN MANUALLY EDIT THESE THREE VARIABLES (These names are default text are not official.) ---
           FACTORY_NAME: "Music Deewane Factory"
-          FACTORY_DESCRIPTION: "Plugin repository for Music Deewane." # Leave empty for null
-          FACTORY_THUMBNAIL_URL: "" # Leave empty for null
+          FACTORY_DESCRIPTION: "Plugin repository for Music Deewane."
+          FACTORY_THUMBNAIL_URL: ""
         run: |
+          set -e
           stamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           base="https://github.com/${{ github.repository }}/releases/download/${{ steps.vars.outputs.tag }}"
-
+          echo "Finalizing bex-factory.json with stamp $stamp and base $base"
+          echo "Input file: plugins/bex-factory.json"
+          cat plugins/bex-factory.json | jq . | head -50
           jq --arg base "$base" \
              --arg stamp "$stamp" \
              --arg name "$FACTORY_NAME" \
@@ -123,32 +212,57 @@ jobs:
                 released_at: $stamp
               })
           ' plugins/bex-factory.json > bex-factory.json
+          echo "Generated bex-factory.json:"
+          cat bex-factory.json | jq . | head -80
+          # Validate output
+          jq empty bex-factory.json
+          echo "bex-factory.json valid, plugins: $(jq '.plugins | length' bex-factory.json)"
+          # Verify download URLs
+          echo "Download URLs:"
+          jq -r '.plugins[] | .download_url' bex-factory.json
 
       - name: Publish GitHub release
-        if: steps.packed.outputs.bex_count != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
+          set -e
           tag="${{ steps.vars.outputs.tag }}"
           name="${{ steps.vars.outputs.name }}"
-
-          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
-
+          echo "Publishing release $tag: $name"
+          # Ensure files exist
+          ls -lh plugins/*.bex bex-factory.json
+          # Delete existing tag if any (idempotent)
+          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || echo "No existing release $tag to delete"
+          # Create release with all assets
+          echo "Creating release with assets..."
           gh release create "$tag" plugins/*.bex bex-factory.json \
             --title "$name" \
-            --notes "Auto-built Music Deewane plugins for run ${{ github.run_number }}"
+            --notes "Auto-built Music Deewane plugins for run ${{ github.run_number }} — $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --latest
+          echo "Release created successfully"
+          # Verify release
+          echo "Verifying release assets..."
+          gh release view "$tag" --json assets --jq '.assets[] | "\(.name) (\(.size) bytes) -> \(.url)"' || true
+          # Verify latest redirect works (wait a few seconds for GitHub to update)
+          sleep 3
+          echo "Checking latest bex-factory.json URL..."
+          curl -s -I "https://github.com/${{ github.repository }}/releases/latest/download/bex-factory.json" | head -5 || true
 
       - name: Commit updated bex-factory.json
-        if: steps.packed.outputs.bex_count != '0'
         shell: bash
         run: |
-          if git diff --quiet -- bex-factory.json; then
+          if git diff --quiet -- bex-factory.json 2>/dev/null; then
             echo "No changes to bex-factory.json - skipping commit."
             exit 0
+          fi
+          # Check if file is untracked (new)
+          if ! git ls-files --error-unmatch bex-factory.json 2>/dev/null; then
+            echo "bex-factory.json is new (untracked), will add"
           fi
           git config user.name github-actions
           git config user.email github-actions@users.noreply.github.com
           git add bex-factory.json
           git commit -m "chore: update musicdeewanefactory index for run ${{ github.run_number }} [skip ci]"
           git push
+          echo "Committed and pushed updated bex-factory.json"
